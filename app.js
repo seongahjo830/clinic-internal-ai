@@ -179,8 +179,16 @@ function addMsg(role, html) {
   div.className = 'msg ' + role;
   div.innerHTML = html;
   $('#chatLog').appendChild(div);
+  $('#chatCtrl').style.display = 'block';
   div.scrollIntoView({ behavior: 'smooth', block: 'end' });
   return div;
+}
+function resetChat() {
+  $('#chatLog').innerHTML = '';
+  $('#chatCtrl').style.display = 'none';
+  $('#qInput').value = ''; autosize(); $('#sendBtn').disabled = true;
+  renderExamples();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function sourcesHtml(docs) {
   if (!docs.length) return '';
@@ -198,7 +206,8 @@ const SYSTEM = clinic => `너는 "${clinic}"에서 일하는 치과 알바·어�
 2. 모르면 "이건 등록된 자료에 없어요. 실장님께 확인하거나, 실장님이 자료를 추가하면 답해드릴 수 있어요."라고 말한다.
 3. 후배에게 알려주듯 친절하고 아주 구체적으로. 준비물·순서는 번호나 체크리스트로. 환자에게 할 말이 있으면 따옴표로 멘트를 그대로 제시. 한국어.
 4. 환자 응대 멘트는 절대 원장·치과의사의 실력을 의심하게 만들지 말 것. 표준화·전문성·근거 프레임으로 안내한다.
-5. 답변 끝에 참고한 자료 제목을 언급한다. 의료법·환자안전 관련은 자료 기준을 정확히 전달한다.`;
+5. 답변 끝에 참고한 자료 제목을 언급한다. 의료법·환자안전 관련은 자료 기준을 정확히 전달한다.
+6. "이런 상황엔 어떻게 해요?" 같은 돌발/상황 질문이면: ① 상황을 한 줄로 정리 → ② 지금 당장 할 행동을 1·2·3 단계로 → ③ 환자에게 할 말(있으면) → ④ "이건 꼭 실장님/원장님께"로 넘길 선을 분명히. 자료에 없는 의학적 판단은 지어내지 말고 "원장님 확인이 필요해요"로 안전하게 안내.`;
 
 function contextText(docs) {
   // 가장 관련 높은 1~2개는 거의 전문, 나머지는 핵심만 — 답변이 구체적으로 나오게
@@ -592,6 +601,7 @@ async function init() {
   $('#qInput').oninput = () => { autosize(); $('#sendBtn').disabled = !$('#qInput').value.trim(); };
   $('#qInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } };
   $('#sendBtn').onclick = ask;
+  $('#resetChat').onclick = resetChat;
 
   $('#wikiSearch').oninput = e => renderWiki(e.target.value);
   $('#backBtn').onclick = () => renderWiki($('#wikiSearch').value);

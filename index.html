@@ -125,6 +125,27 @@
         <option value="claude-opus-4-8">Opus 4.8 (가장 똑똑)</option>
       </select>
     </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+    <div class="field">
+      <label>🔗 실시간 공유 <span id="syncStatus" class="sync-st"></span></label>
+      <div class="hint" style="margin-bottom:9px">켜면 <b>어느 기기·브라우저에서 추가해도 전 직원에게 실시간 반영</b>돼요. 무료 Supabase 한 번만 연결하면 됩니다.</div>
+      <details class="setup-guide">
+        <summary>📋 처음 한 번 — 2분 연결 방법 (눌러서 펼치기)</summary>
+        <ol>
+          <li><a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> 가입 → <b>New project</b> (무료, 비번 아무거나)</li>
+          <li>좌측 <b>SQL Editor</b> → 아래 SQL 붙여넣고 <b>Run</b> <button class="btn sm ghost" id="copySql" type="button">SQL 복사</button>
+            <pre id="setupSql" class="sql"></pre></li>
+          <li>좌측 <b>Project Settings → API</b> 에서 <b>Project URL</b> 과 <b>anon public</b> 키를 복사</li>
+          <li>아래 두 칸에 붙여넣고 <b>연결</b> 클릭</li>
+        </ol>
+      </details>
+      <input id="syncUrl" placeholder="Project URL (https://xxxx.supabase.co)" style="margin-bottom:8px">
+      <input id="syncKey" type="password" placeholder="anon public 키 (eyJ...)">
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="syncConnect" type="button">연결 / 켜기</button>
+        <button class="btn ghost" id="syncDisconnect" type="button">끄기</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn ghost" id="closeSettings">닫기</button>
       <button class="btn" id="saveSettings">저장</button>

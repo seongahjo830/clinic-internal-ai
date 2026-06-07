@@ -1,4 +1,5 @@
 // 서울사계절치과 내부 AI — app.js
+import { Sync, SETUP_SQL } from './sync.js';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const LS = {
@@ -60,6 +61,20 @@ function retrieve(query, n = 5) {
     .sort((a, b) => b.s - a.s)
     .slice(0, n)
     .map(x => x.d);
+}
+// 검색 모드용: 질문어가 가장 많이 나오는 "섹션"을 뽑아 보여줌 (제목/서두가 아니라 알맹이)
+function excerpt(doc, query) {
+  const md = (doc.markdown || '');
+  const toks = tokenize(query);
+  const secs = md.split(/\n(?=#{1,3}\s)/).filter(s => s.trim().length > 30);
+  let best = null, bestScore = -1;
+  for (const sec of secs) {
+    const low = sec.toLowerCase();
+    let sc = 0; for (const t of toks) sc += low.split(t).length - 1;
+    if (sc > bestScore) { bestScore = sc; best = sec; }
+  }
+  if (bestScore <= 0) return doc.summary || md.slice(0, 700);
+  return best.trim().slice(0, 1900);
 }
 
 // ---------- Markdown 렌더 (Obsidian callout + wikilink) ----------
@@ -170,8 +185,11 @@ const SYSTEM = clinic => `너는 "${clinic}"에서 일하는 치과 알바·어�
 5. 답변 끝에 참고한 자료 제목을 언급한다. 의료법·환자안전 관련은 자료 기준을 정확히 전달한다.`;
 
 function contextText(docs) {
-  return '\n\n# 우리치과 자료 발췌\n' + docs.map((d, i) =>
-    `\n## [자료 ${i + 1}] ${d.title} (${d.category})\n${(d.markdown || '').slice(0, 2200)}`).join('\n');
+  // 가장 관련 높은 1~2개는 거의 전문, 나머지는 핵심만 — 답변이 구체적으로 나오게
+  return '\n\n# 우리치과 자료 발췌 (이 내용만 근거로 답하세요)\n' + docs.map((d, i) => {
+    const limit = i === 0 ? 5000 : i === 1 ? 3500 : 1600;
+    return `\n## [자료 ${i + 1}] ${d.title} (${d.category})\n${(d.markdown || '').slice(0, limit)}`;
+  }).join('\n');
 }
 
 async function callClaude(question, docs) {
@@ -185,7 +203,7 @@ async function callClaude(question, docs) {
     },
     body: JSON.stringify({
       model: state.model,
-      max_tokens: 1200,
+      max_tokens: 1500,
       system: SYSTEM(state.clinic) + contextText(docs),
       messages: [{ role: 'user', content: question }],
     }),
@@ -220,9 +238,10 @@ async function ask() {
       } else {
         const top = docs[0];
         thinking.innerHTML =
-          `<div class="md"><b>🔎 검색 모드</b> (API 키를 넣으면 AI가 요약·답변해드려요)<br>가장 관련 있는 자료예요:</div>` +
-          `<div class="md" style="margin-top:10px">${renderMarkdown((top.summary || top.markdown.slice(0, 400)))}</div>` +
+          `<div class="md"><b>🔎 검색 모드</b> — AI 답변을 켜려면 위 <b>📚 자료…</b> 줄(또는 ⚙️)에서 Claude API 키를 넣어주세요. 지금은 가장 관련 있는 자료를 그대로 보여드려요:</div>` +
+          `<div class="md card" style="margin-top:10px;padding:16px">${renderMarkdown(excerpt(top, q))}</div>` +
           sourcesHtml(docs);
+        bindWikilinks(thinking);
       }
     }
   } catch (e) {
@@ -306,6 +325,7 @@ function addUpload(title, text) {
   state.eduLog.unshift({ text: `자료 추가: ${title}`, dt: new Date().toISOString().slice(0, 16).replace('T', ' ') });
   LS.set('edu', state.eduLog);
   renderUploads(); renderEdu(); renderWiki(); updateKbPill();
+  pushShared();
   toast('✅ 자료를 추가했어요');
 }
 function renderUploads() {
@@ -323,7 +343,7 @@ function renderUploads() {
   $$('.del-up').forEach(b => b.onclick = () => {
     const id = b.closest('.up-item').dataset.id;
     state.uploads = state.uploads.filter(u => u.id !== id);
-    saveUploads(); renderUploads(); renderWiki(); updateKbPill(); toast('삭제했어요');
+    saveUploads(); pushShared(); renderUploads(); renderWiki(); updateKbPill(); toast('삭제했어요');
   });
 }
 function renderEdu() {
@@ -333,7 +353,7 @@ function renderEdu() {
       <button class="btn sm ghost del-edu" data-i="${i}" style="color:var(--red)">×</button></div>`).join('')
     : `<div class="empty">교육 기록이 없어요. 무엇을 교육했는지 적어두면 누적돼요.</div>`;
   $$('.del-edu').forEach(b => b.onclick = () => {
-    state.eduLog.splice(+b.dataset.i, 1); LS.set('edu', state.eduLog); renderEdu();
+    state.eduLog.splice(+b.dataset.i, 1); LS.set('edu', state.eduLog); pushShared(); renderEdu();
   });
 }
 function readFiles(files) {
@@ -343,6 +363,35 @@ function readFiles(files) {
     r.readAsText(f);
   });
 }
+
+// ---------- 실시간 공유 동기화 (Supabase) ----------
+let syncTimer = null, lastSharedJson = '';
+const sharedPayload = () => ({ uploads: state.uploads, edu: state.eduLog });
+async function pushShared() {
+  if (!Sync.enabled()) return;
+  try { const p = sharedPayload(); lastSharedJson = JSON.stringify(p); await Sync.save(p); }
+  catch (e) { console.warn('공유 저장 실패', e); toast('⚠️ 공유 저장 실패 — 네트워크 확인'); }
+}
+async function pullShared(initial) {
+  if (!Sync.enabled()) return;
+  try {
+    const d = await Sync.load(); if (!d) return;
+    const j = JSON.stringify({ uploads: d.uploads || [], edu: d.edu || [] });
+    if (j === lastSharedJson) return;
+    lastSharedJson = j;
+    state.uploads = d.uploads || []; state.eduLog = d.edu || [];
+    LS.set('uploads', state.uploads); LS.set('edu', state.eduLog);
+    renderUploads(); renderEdu(); renderWiki(); renderOnboard(); updateKbPill();
+    if (!initial) toast('🔄 공유 자료가 업데이트됐어요');
+  } catch (e) { console.warn('공유 불러오기 실패', e); }
+}
+function startSync() {
+  if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+  if (!Sync.enabled()) return;
+  pullShared(true);
+  syncTimer = setInterval(() => pullShared(false), 8000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pullShared(false); });
 
 // ---------- 온보딩 커리큘럼 (신입 알바 자가 적응) ----------
 const CURRICULUM = [
@@ -421,8 +470,50 @@ function openSettings() {
   $('#clinicInput').value = state.clinic;
   $('#apiKeyInput').value = state.apiKey;
   $('#modelSelect').value = state.model;
+  const c = Sync.cfg() || {};
+  $('#syncUrl').value = c.url || '';
+  $('#syncKey').value = c.key || '';
+  $('#setupSql').textContent = SETUP_SQL;
+  renderSyncStatus();
   updateKeyStatus();
   $('#overlay').classList.add('on');
+}
+function renderSyncStatus(msg, cls) {
+  const el = $('#syncStatus');
+  if (msg) { el.textContent = msg; el.className = 'sync-st ' + (cls || ''); return; }
+  el.className = 'sync-st ' + (Sync.enabled() ? 'ok' : '');
+  el.textContent = Sync.enabled()
+    ? '🟢 실시간 공유 켜짐 — 모든 기기에서 같은 자료를 봅니다'
+    : '⚪ 꺼짐 — 추가한 자료가 이 기기에만 저장됩니다';
+}
+async function connectSync() {
+  const url = $('#syncUrl').value.trim(), key = $('#syncKey').value.trim();
+  if (!url || !key) { renderSyncStatus('주소와 키를 모두 넣어주세요', 'err'); return; }
+  renderSyncStatus('연결 확인 중…');
+  const r = await Sync.test(url, key);
+  if (!r.ok) {
+    renderSyncStatus(`연결 실패 (${r.status || '네트워크'}) — 주소·키·SQL 실행을 확인하세요`, 'err');
+    return;
+  }
+  Sync.setCfg(url, key);
+  // 이 기기의 기존 추가자료를 공유 저장소에 합쳐 올림 (최초 연결 시)
+  const remote = await Sync.load();
+  const mergedUp = [...(remote?.uploads || [])];
+  for (const u of state.uploads) if (!mergedUp.some(x => x.id === u.id)) mergedUp.push(u);
+  const mergedEdu = [...(remote?.edu || []), ...state.eduLog];
+  state.uploads = mergedUp; state.eduLog = mergedEdu;
+  LS.set('uploads', state.uploads); LS.set('edu', state.eduLog);
+  await pushShared();
+  renderUploads(); renderEdu(); renderWiki(); renderOnboard(); updateKbPill();
+  startSync();
+  renderSyncStatus();
+  toast('🟢 실시간 공유를 켰어요');
+}
+function disconnectSync() {
+  Sync.clear();
+  if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+  renderSyncStatus();
+  toast('실시간 공유를 껐어요 (자료는 이 기기에 남아요)');
 }
 function updateKeyStatus() {
   const el = $('#keyStatus');
@@ -488,9 +579,14 @@ async function init() {
     const t = $('#eduInput').value.trim();
     if (!t) return toast('교육 내용을 입력해 주세요');
     state.eduLog.unshift({ text: t, dt: new Date().toISOString().slice(0, 16).replace('T', ' ') });
-    LS.set('edu', state.eduLog); $('#eduInput').value = ''; renderEdu(); toast('교육 기록 추가');
+    LS.set('edu', state.eduLog); pushShared(); $('#eduInput').value = ''; renderEdu(); toast('교육 기록 추가');
   };
 
+  $('#syncConnect').onclick = connectSync;
+  $('#syncDisconnect').onclick = disconnectSync;
+  $('#copySql').onclick = () => { navigator.clipboard?.writeText(SETUP_SQL); toast('SQL을 복사했어요'); };
+
   renderWiki(); renderOnboard();
+  startSync();
 }
 init();

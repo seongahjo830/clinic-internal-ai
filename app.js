@@ -83,13 +83,29 @@ const CALLOUT = {
   success: '✅', warning: '⚠️', caution: '⚠️', danger: '🚫', history: '🕘',
   question: '❓', important: '⭐', todo: '☑️', abstract: '📄', quote: '💬',
 };
+// 링크 키 정규화: 공백·하이픈·가운뎃점·기호·이모지 제거 → 매칭 견고하게
+function normKey(s) {
+  return (s || '').toLowerCase().replace(/\.md$/, '')
+    .replace(/[\s\-·_().,!?:;#*`~/[\]|]/g, '')
+    .replace(/\p{Extended_Pictographic}/gu, '');
+}
+function resolveDoc(key) {
+  const nk = normKey(key); if (nk.length < 2) return null;
+  const docs = allDocs();
+  let d = docs.find(x => normKey(x.title) === nk); if (d) return d;
+  d = docs.find(x => normKey((x.source || '').split('/').pop()) === nk); if (d) return d;
+  d = docs.find(x => { const nt = normKey(x.title); return nt.length >= 2 && (nt.includes(nk) || (nk.length >= 3 && nk.includes(nt))); }); if (d) return d;
+  d = docs.find(x => normKey(x.source || '').includes(nk));
+  return d || null;
+}
 function preWikilink(md) {
   return md
     .replace(/!\[\[[^\]]*\]\]/g, '') // 임베드 제거
     .replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, tgt, alias) => {
       const label = (alias || tgt).trim();
-      const key = tgt.split('/').pop().trim();
-      return `<span class="wlink" data-link="${escapeHtml(key)}">${escapeHtml(label)}</span>`;
+      const d = resolveDoc(tgt.split('/').pop().trim());
+      // 연결 대상이 있으면 클릭 링크, 없으면 그냥 글자(깨진 "못 찾음" 방지)
+      return d ? `<span class="wlink" data-doc="${d.id}">${escapeHtml(label)}</span>` : escapeHtml(label);
     });
 }
 function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -253,35 +269,56 @@ async function ask() {
   updateKbPill();
 }
 
-// ---------- 위키 ----------
+// ---------- 위키 (핵심 + 전체 한 탭에) ----------
+let wikiView = 'core'; // 'core'(실전 핵심만) | 'all'(전체 목록)
+const li = arr => (arr || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+function coreCard(d) {
+  return `<div class="core-card" data-doc="${d.id}">
+    <div class="cc-h"><span>${escapeHtml(d.title)}</span><span class="cc-go">자세히 →</span></div>
+    ${d.core?.length ? `<div class="cc-sec ccore"><div class="cc-l">🎯 이것만은 꼭</div><ul>${li(d.core)}</ul></div>` : ''}
+    ${d.risk?.length ? `<div class="cc-sec crisk"><div class="cc-l">⚠️ 빠뜨리면 위험</div><ul>${li(d.risk)}</ul></div>` : ''}
+    ${d.say?.length ? `<div class="cc-sec csay"><div class="cc-l">💬 환자에게</div><ul>${li(d.say)}</ul></div>` : ''}
+  </div>`;
+}
 function renderWiki(filter = '') {
   $('#reader').style.display = 'none';
   $('#wikiList').style.display = '';
   const docs = visibleDocs();
-  const f = filter.trim().toLowerCase();
-  const shown = f
-    ? docs.filter(d => (d.title + d.summary + d.markdown).toLowerCase().includes(f))
-    : docs;
-  const groups = {};
-  for (const d of shown) (groups[d.category] ||= []).push(d);
-  const cats = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
-  if (!shown.length) { $('#wikiGroups').innerHTML = `<div class="empty">검색 결과가 없어요.</div>`; return; }
-  $('#wikiGroups').innerHTML = cats.map((cat, gi) => `
-    <div class="cat-group ${f ? 'open' : (gi === 0 ? 'open' : '')}">
-      <div class="cat-head"><span class="arw">▶</span>${escapeHtml(cat)}<span class="cnt">${groups[cat].length}</span></div>
-      <div class="doc-list">${groups[cat].map(d => `
-        <div class="doc-item" data-doc="${d.id}">
-          <div style="flex:1">
-            <div class="ti">${escapeHtml(d.title)}</div>
-            <div class="sm">${escapeHtml(d.summary || '')}</div>
-          </div>
-          ${d.refined ? '<span class="badge refined">📘 정리됨</span>' : ''}
-          ${d.role === 'dentist' ? '<span class="badge dent">치과의사</span>' : d.role === 'manager' ? '<span class="badge mgr">실장·경영</span>' : ''}
-          ${d.uploaded ? '<span class="badge up">추가</span>' : ''}
-        </div>`).join('')}</div>
-    </div>`).join('');
+  const f = (filter || '').trim().toLowerCase();
+  const shown = f ? docs.filter(d => (d.title + d.summary + d.markdown).toLowerCase().includes(f)) : docs;
+  const chips = `<div class="wiki-views">
+    <button class="vchip ${wikiView === 'core' ? 'on' : ''}" data-v="core">⭐ 실전 핵심만</button>
+    <button class="vchip ${wikiView === 'all' ? 'on' : ''}" data-v="all">📚 전체 목록</button></div>`;
+
+  let body;
+  if (wikiView === 'core') {
+    const cards = shown.filter(d => d.core?.length || d.risk?.length || d.say?.length);
+    body = cards.length
+      ? `<div class="core-intro">못 읽을 시간 없을 땐 이 카드만. 실전에 바로 쓰는 핵심·실수주의·환자멘트예요. (자세한 건 카드 클릭)</div>` + cards.map(coreCard).join('')
+      : `<div class="empty">${f ? '검색 결과가 없어요.' : '아직 정리된 핵심 카드가 없어요. 📚 전체 목록에서 보세요.'}</div>`;
+  } else {
+    const groups = {};
+    for (const d of shown) (groups[d.category] ||= []).push(d);
+    const cats = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'ko'));
+    body = shown.length ? cats.map((cat, gi) => `
+      <div class="cat-group ${f || gi === 0 ? 'open' : ''}">
+        <div class="cat-head"><span class="arw">▶</span>${escapeHtml(cat)}<span class="cnt">${groups[cat].length}</span></div>
+        <div class="doc-list">${groups[cat].map(d => `
+          <div class="doc-item" data-doc="${d.id}">
+            <div style="flex:1">
+              <div class="ti">${escapeHtml(d.title)}</div>
+              <div class="sm">${escapeHtml(d.core?.[0] ? '🎯 ' + d.core[0] : (d.summary || ''))}</div>
+            </div>
+            ${d.refined ? '<span class="badge refined">📘 정리됨</span>' : ''}
+            ${d.role === 'dentist' ? '<span class="badge dent">치과의사</span>' : d.role === 'manager' ? '<span class="badge mgr">실장·경영</span>' : ''}
+            ${d.uploaded ? '<span class="badge up">추가</span>' : ''}
+          </div>`).join('')}</div>
+      </div>`).join('') : `<div class="empty">검색 결과가 없어요.</div>`;
+  }
+  $('#wikiGroups').innerHTML = chips + body;
+  $$('.vchip').forEach(b => b.onclick = () => { wikiView = b.dataset.v; renderWiki($('#wikiSearch').value); });
   $$('.cat-head').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
-  $$('.doc-item').forEach(it => it.onclick = () => openDoc(it.dataset.doc));
+  $$('.doc-item, .core-card').forEach(it => it.onclick = () => openDoc(it.dataset.doc));
 }
 function openDoc(id) {
   const d = allDocs().find(x => x.id === id);
@@ -299,12 +336,7 @@ function openDoc(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function bindWikilinks(el) {
-  $$('.wlink', el).forEach(w => w.onclick = () => {
-    const key = w.dataset.link;
-    const d = allDocs().find(x =>
-      x.title.includes(key) || (x.source || '').includes(key) || key.includes(x.title));
-    if (d) openDoc(d.id); else toast('연결된 자료를 못 찾았어요: ' + key);
-  });
+  $$('.wlink', el).forEach(w => w.onclick = () => { if (w.dataset.doc) openDoc(w.dataset.doc); });
 }
 
 // ---------- 업로드 ----------

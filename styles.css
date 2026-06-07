@@ -83,6 +83,9 @@ main{max-width:var(--maxw);margin:0 auto;padding:18px}
 .vchip{flex:1;padding:11px;border-radius:12px;font-weight:700;font-size:14px;color:var(--t2);background:var(--card);border:1px solid var(--line)}
 .vchip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 .core-intro{font-size:13px;color:var(--t3);margin-bottom:12px;line-height:1.5}
+.core-cat{font-size:13px;font-weight:800;color:var(--t2);margin:18px 0 9px 2px;display:flex;align-items:center;gap:7px}
+.core-cat span{font-size:11px;font-weight:700;color:var(--t3);background:var(--bg);padding:2px 8px;border-radius:999px}
+.core-cat:first-of-type{margin-top:4px}
 .core-card{background:var(--card);border-radius:16px;box-shadow:var(--sh);padding:16px 18px;margin-bottom:12px;cursor:pointer;border:1px solid var(--line);transition:.15s}
 .core-card:hover{border-color:var(--blue);transform:translateY(-1px)}
 .cc-h{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:15.5px;margin-bottom:10px;gap:8px}

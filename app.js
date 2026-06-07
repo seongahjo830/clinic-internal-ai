@@ -36,27 +36,62 @@ const visibleDocs = () =>
   state.mode === 'all' ? allDocs() : allDocs().filter(d => (d.role || 'assistant') === 'assistant');
 
 // ---------- 검색/검색 점수 ----------
+// 알바 구어체 ↔ 문서 정식용어 동의어 (왼쪽 단서가 질문에 있으면 오른쪽 용어로 검색 확장)
+const SYN = [
+  [['욕', '쌍욕', '폭언', '화내', '화난', '진상', '컴플', '시비', '소리지'], ['욕설', '폭언', '화난', '컴플레인']],
+  [['비싸', '비쌈', '바가지', '할인', '비용', '돈'], ['가격', '비급여', '비용', '가격저항']],
+  [['아파', '아픔', '아프', '쑤시', '시려', '시림', '욱신'], ['통증', '시림']],
+  [['뽑', '빼는', '빼요'], ['발치', '발거']],
+  [['틀니'], ['덴쳐', '의치']],
+  [['신경', '엔도'], ['신경치료', '근관', '발수', 'ce', 'ci', 'cf', 'pe']],
+  [['잇몸', '치석', '스케일'], ['치주', '페리오', '치석', 'srp', '스케일링']],
+  [['본뜨', '본떠', '인상', '스캔', '본 떠'], ['인상', '스캔', 'prep', '본뜨기']],
+  [['며칠', '몇번', '몇 번', '다음예약', '재방문'], ['예약', '내원', '다음 예약', '리콜']],
+  [['붓', '부었', '고름', '농양', '곪'], ['농양', '배농', 'i&d', '부종', '소염']],
+  [['브라켓', '철사', '고무줄', '교정'], ['교정', '브라켓', '와이어', '엘라스틱']],
+  [['아이', '애기', '유치', '소아'], ['소아', '유치', '실란트', '치수절단']],
+  [['기다', '오래', '늦', '대기'], ['대기', '대기시간']],
+  [['멸균', '소독', '세척', '감염'], ['멸균', '소독', '세척', '오토클레이브']],
+  [['전화', '콜', '해피콜', '미내원', '노쇼'], ['전화', '콜', '수신', '발신', '미내원']],
+  [['임플', '임플란트', '나사', '픽스처'], ['임플란트', '픽스처', '힐링', '식립']],
+];
 function tokenize(q) {
   return (q || '').toLowerCase().split(/[\s,.;:!?()[\]'"~/]+/).filter(t => t.length >= 2);
 }
-function scoreDoc(doc, tokens) {
+function expandTokens(q) {
+  const base = tokenize(q);
+  const low = (q || '').toLowerCase();
+  const extra = new Set();
+  for (const [keys, vals] of SYN) {
+    if (keys.some(k => low.includes(k))) vals.forEach(v => extra.add(v.toLowerCase()));
+  }
+  return { base, extra: [...extra] };
+}
+function scoreDoc(doc, base, extra) {
   const title = (doc.title || '').toLowerCase();
   const sum = (doc.summary || '').toLowerCase();
+  const cat = (doc.category || '').toLowerCase();
   const body = (doc.markdown || '').toLowerCase();
   let s = 0;
-  for (const t of tokens) {
+  for (const t of base) {
     if (title.includes(t)) s += 8;
+    if (cat.includes(t)) s += 5;
     if (sum.includes(t)) s += 4;
-    const m = body.split(t).length - 1;
-    s += Math.min(m, 6);
+    s += Math.min(body.split(t).length - 1, 6);
+  }
+  for (const t of extra) { // 동의어는 약간 낮게
+    if (title.includes(t)) s += 6;
+    if (cat.includes(t)) s += 4;
+    if (sum.includes(t)) s += 3;
+    s += Math.min(body.split(t).length - 1, 4);
   }
   return s;
 }
 function retrieve(query, n = 5) {
-  const tokens = tokenize(query);
-  if (!tokens.length) return [];
+  const { base, extra } = expandTokens(query);
+  if (!base.length) return [];
   return visibleDocs()
-    .map(d => ({ d, s: scoreDoc(d, tokens) }))
+    .map(d => ({ d, s: scoreDoc(d, base, extra) }))
     .filter(x => x.s > 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, n)
@@ -65,7 +100,8 @@ function retrieve(query, n = 5) {
 // 검색 모드용: 질문어가 가장 많이 나오는 "섹션"을 뽑아 보여줌 (제목/서두가 아니라 알맹이)
 function excerpt(doc, query) {
   const md = (doc.markdown || '');
-  const toks = tokenize(query);
+  const ex = expandTokens(query);
+  const toks = [...ex.base, ...ex.extra];
   const secs = md.split(/\n(?=#{1,3}\s)/).filter(s => s.trim().length > 30);
   let best = null, bestScore = -1;
   for (const sec of secs) {
@@ -310,9 +346,15 @@ function renderWiki(filter = '') {
   let body;
   if (wikiView === 'core') {
     const cards = shown.filter(d => d.core?.length || d.risk?.length || d.say?.length);
-    body = cards.length
-      ? `<div class="core-intro">못 읽을 시간 없을 땐 이 카드만. 실전에 바로 쓰는 핵심·실수주의·환자멘트예요. (자세한 건 카드 클릭)</div>` + cards.map(coreCard).join('')
-      : `<div class="empty">${f ? '검색 결과가 없어요.' : '아직 정리된 핵심 카드가 없어요. 📚 전체 목록에서 보세요.'}</div>`;
+    if (!cards.length) {
+      body = `<div class="empty">${f ? '검색 결과가 없어요.' : '아직 정리된 핵심 카드가 없어요. 📚 전체 목록에서 보세요.'}</div>`;
+    } else {
+      const g = {};
+      for (const d of cards) (g[d.category] ||= []).push(d);
+      const cats = Object.keys(g).sort((a, b) => a.localeCompare(b, 'ko'));
+      body = `<div class="core-intro">못 읽을 시간 없을 땐 이 카드만. 실전에 바로 쓰는 핵심·실수주의·환자멘트예요. (자세한 건 카드 클릭)</div>`
+        + cats.map(cat => `<div class="core-cat">${escapeHtml(cat)} <span>${g[cat].length}</span></div>` + g[cat].map(coreCard).join('')).join('');
+    }
   } else {
     const groups = {};
     for (const d of shown) (groups[d.category] ||= []).push(d);
@@ -464,8 +506,8 @@ const CURRICULUM = [
   { week: '3주차 · 진료 어시스트 기본', steps: [
     { id: 'w3d1', t: '진료 보조 준비물', read: ['레진', '임플란트', '발치', '외과', '덴쳐'],
       q: ['레진 치료할 때 체어에 뭐 세팅해요?', '발치 어시스트 준비물은 뭐예요?', '임플란트 수술 어시는 뭘 챙겨요?'] },
-    { id: 'w3d2', t: '환자 유형별 주의 / 리콜', read: ['환자유형', '보라색', '리콜'],
-      q: ['특별히 조심해야 하는 환자 유형이 있어요?', '재방문(리콜) 안내는 어떻게 해요?'] },
+    { id: 'w3d2', t: '소아 환자 / 정기검진·리콜', read: ['소아', '유치', '정기검진', '신환'],
+      q: ['소아 환자 진료는 뭐가 달라요?', '정기검진은 몇 개월마다 오라고 해요?'] },
   ]},
 ];
 const FLAT_STEPS = CURRICULUM.flatMap(w => w.steps);

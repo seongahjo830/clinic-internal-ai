@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>서울사계절치과 내부 AI</title>
+<meta name="description" content="우리치과 내규 기반 직원용 AI 위키 — 물어보고, 자료 넣고, 위키로 본다">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="googlebot" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦷</text></svg>">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-in">
+    <div class="brand">
+      <span class="logo">🦷</span>
+      <span><span id="clinicName">서울사계절치과</span><span class="sub">내부 AI · 내규 위키</span></span>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" id="modeSeg">
+      <button data-mode="staff" class="on">직원</button>
+      <button data-mode="dentist">치과의사·실장</button>
+    </div>
+    <button class="icon-btn" id="settingsBtn" title="설정">⚙️</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="chat" class="on"><span class="em">💬</span>질문하기</button>
+  <button data-tab="wiki"><span class="em">📚</span>위키</button>
+  <button data-tab="upload" id="tabUpload"><span class="em">➕</span>자료 추가</button>
+</nav>
+
+<main>
+  <!-- ===== CHAT ===== -->
+  <section class="panel on" id="panel-chat">
+    <div class="hero">
+      <h1>무엇이든 물어보세요</h1>
+      <p>우리치과 내규·운영 규정·임상 위키를 근거로 답해드려요.</p>
+      <span class="pill" id="kbPill">📚 자료 — 개</span>
+    </div>
+    <div id="chatLog"></div>
+    <div id="examplesWrap"></div>
+    <div class="composer">
+      <div class="composer-in">
+        <textarea id="qInput" rows="1" placeholder="예) 비급여 단독 진료 차팅 어떻게 해요?"></textarea>
+        <button class="send" id="sendBtn" disabled>↑</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== WIKI ===== -->
+  <section class="panel" id="panel-wiki">
+    <div id="wikiList">
+      <div class="searchbar">
+        <span class="ic">🔍</span>
+        <input id="wikiSearch" placeholder="위키 검색 — 제목·내용에서 찾기">
+      </div>
+      <div id="wikiGroups"></div>
+    </div>
+    <div id="reader">
+      <button class="back" id="backBtn">← 목록으로</button>
+      <h1 id="readerTitle"></h1>
+      <div class="reader-meta" id="readerMeta"></div>
+      <div class="md card" id="readerBody"></div>
+    </div>
+  </section>
+
+  <!-- ===== UPLOAD ===== -->
+  <section class="panel" id="panel-upload">
+    <div class="dropzone" id="dropzone">
+      <div class="big">📥</div>
+      <div class="t">파일을 끌어다 놓으세요</div>
+      <div class="s">.md · .txt · .json · .csv — 또는 클릭해서 선택</div>
+      <input type="file" id="fileInput" multiple accept=".md,.txt,.json,.csv,.markdown" hidden>
+    </div>
+    <textarea class="paste-area" id="pasteArea" placeholder="또는 여기에 교육자료·내규 텍스트를 붙여넣으세요"></textarea>
+    <div class="row">
+      <button class="btn" id="addPasteBtn">붙여넣은 내용 추가</button>
+    </div>
+
+    <div class="section-title">📦 추가한 자료 <span id="upCount" style="color:var(--t3);font-weight:600;font-size:13px"></span></div>
+    <div id="upList"></div>
+
+    <div class="section-title">🎓 교육 기록 <span style="color:var(--t3);font-weight:600;font-size:13px">무엇을 언제 교육했는지</span></div>
+    <div class="row" style="margin-bottom:12px">
+      <input id="eduInput" class="paste-area" style="min-height:auto;padding:11px 14px;flex:1" placeholder="예) 데스크 직원에게 EOD 차팅 체크리스트 교육">
+      <button class="btn" id="addEduBtn">교육 기록</button>
+    </div>
+    <div id="eduList"></div>
+  </section>
+</main>
+
+<!-- Settings modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2>⚙️ 설정</h2>
+    <p class="desc">AI 답변을 켜려면 Claude API 키가 필요해요. 키는 <b>이 브라우저에만</b> 저장되고 서버로 전송되지 않아요(앱이 Anthropic API를 직접 호출).</p>
+    <div class="field">
+      <label>치과 이름</label>
+      <input id="clinicInput" placeholder="서울사계절치과">
+    </div>
+    <div class="field">
+      <label>Claude API 키 <span id="keyStatus"></span></label>
+      <input id="apiKeyInput" type="password" placeholder="sk-ant-...">
+      <div class="hint">키 발급: console.anthropic.com → API Keys. 키가 없어도 위키 검색·관련 자료 찾기는 작동해요.</div>
+    </div>
+    <div class="field">
+      <label>AI 모델</label>
+      <select id="modelSelect">
+        <option value="claude-haiku-4-5-20251001">Haiku 4.5 (빠르고 저렴)</option>
+        <option value="claude-sonnet-4-6" selected>Sonnet 4.6 (권장 · 균형)</option>
+        <option value="claude-opus-4-8">Opus 4.8 (가장 똑똑)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="closeSettings">닫기</button>
+      <button class="btn" id="saveSettings">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

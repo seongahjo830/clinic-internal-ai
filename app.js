@@ -116,7 +116,7 @@ function setMode(mode) {
   // 자료추가는 원장·실장(all) 모드에서만
   $('#tabUpload').style.display = mode === 'all' ? '' : 'none';
   if (mode !== 'all' && $('#panel-upload').classList.contains('on')) setTab('chat');
-  renderExamples(); renderWiki(); updateKbPill();
+  renderExamples(); renderWiki(); updateKbPill(); renderOnboard();
 }
 function updateKbPill() {
   const pill = $('#kbPill');
@@ -344,6 +344,78 @@ function readFiles(files) {
   });
 }
 
+// ---------- 온보딩 커리큘럼 (신입 알바 자가 적응) ----------
+const CURRICULUM = [
+  { week: '1주차 · 첫 출근과 기본', steps: [
+    { id: 'w1d1', t: 'Day 1 — 우리치과 파악하기', read: ['데스크 개인', '기본정보', '직원 호칭', '호칭'],
+      q: ['우리치과는 어떤 곳이에요? 주로 어떤 진료를 해요?', '출근하면 제일 먼저 뭘 해요?', '직원들 호칭은 어떻게 불러요?'] },
+    { id: 'w1d2', t: 'Day 2 — 접수·예약·수납', read: ['접수', '예약', '수납'],
+      q: ['신환(처음 온 환자) 접수는 어떻게 해요?', '다음 예약은 보통 며칠 뒤로 잡아요?', '수납할 때 실수하면 안 되는 게 뭐예요?'] },
+    { id: 'w1d3', t: 'Day 3 — 대기실·소모품 관리', read: ['대기실', '소모품'],
+      q: ['아침에 대기실 세팅은 뭐 해요?', '소모품이 떨어지면 어떻게 해요?'] },
+  ]},
+  { week: '2주차 · 환자 응대', steps: [
+    { id: 'w2d1', t: '오래 기다린 / 화난 환자', read: ['대기시간 30분', '대기시간', '욕설', '폭언'],
+      q: ['환자가 오래 기다려서 화났어요. 어떻게 응대해요?', '환자가 욕을 하면 어떻게 해요?'] },
+    { id: 'w2d2', t: '"왜 이렇게 비싸요" 가격 응대', read: ['가격저항', '비싸'],
+      q: ['환자가 "왜 이렇게 비싸요" 하면 뭐라고 답해요?', '비급여 가격을 물어보면 어떻게 안내해요?'] },
+    { id: 'w2d3', t: '원장 지정 / 진료 후 안내', read: ['원장 지정', '진료별 주의사항', '안내문'],
+      q: ['환자가 원장님을 지정했는데 다른 선생님이 봐야 하면 어떻게 말해요?', '발치하고 나서 환자한테 주의사항을 뭐라고 안내해요?'] },
+  ]},
+  { week: '3주차 · 진료 어시스트 기본', steps: [
+    { id: 'w3d1', t: '진료 보조 준비물', read: ['레진', '임플란트', '발치', '외과', '덴쳐'],
+      q: ['레진 치료할 때 체어에 뭐 세팅해요?', '발치 어시스트 준비물은 뭐예요?', '임플란트 수술 어시는 뭘 챙겨요?'] },
+    { id: 'w3d2', t: '환자 유형별 주의 / 리콜', read: ['환자유형', '보라색', '리콜'],
+      q: ['특별히 조심해야 하는 환자 유형이 있어요?', '재방문(리콜) 안내는 어떻게 해요?'] },
+  ]},
+];
+const FLAT_STEPS = CURRICULUM.flatMap(w => w.steps);
+let currDone = LS.get('curr', {});
+
+function matchDocs(keywords) {
+  const out = [];
+  for (const d of visibleDocs()) {
+    const hay = (d.title + ' ' + (d.summary || '')).toLowerCase();
+    if (keywords.some(k => hay.includes(k.toLowerCase())) && !out.includes(d)) out.push(d);
+  }
+  return out.slice(0, 4);
+}
+function currProgress() {
+  const done = FLAT_STEPS.filter(s => currDone[s.id]).length;
+  return { done, total: FLAT_STEPS.length, pct: Math.round(done / FLAT_STEPS.length * 100) };
+}
+function nextStep() { return FLAT_STEPS.find(s => !currDone[s.id]) || null; }
+function toggleStep(id) { currDone[id] = !currDone[id]; LS.set('curr', currDone); renderOnboard(); }
+function askFromCurr(q) { setTab('chat'); $('#qInput').value = q; autosize(); $('#sendBtn').disabled = false; ask(); }
+
+function renderOnboard() {
+  const root = $('#onboardRoot'); if (!root) return;
+  const p = currProgress(), next = nextStep();
+  const today = next
+    ? `<div class="today"><div class="lbl">🎓 오늘 할 일</div><div class="step-t">${escapeHtml(next.t)}</div>
+        <div class="hint">읽을 자료를 보고 → 아래 질문을 눌러 물어보고 → 다 됐으면 체크하세요.</div></div>`
+    : `<div class="today doneall"><div class="lbl">🎉 온보딩을 모두 끝냈어요!</div><div class="hint">이제 궁금한 건 언제든 💬 질문하기에서 물어보세요.</div></div>`;
+  const bar = `<div class="prog"><div class="prog-bar"><span style="width:${p.pct}%"></span></div><div class="prog-n">${p.done}/${p.total} · ${p.pct}%</div></div>`;
+  const weeks = CURRICULUM.map(w => `
+    <div class="ob-week"><div class="ob-wk-t">${escapeHtml(w.week)}</div>
+      ${w.steps.map(s => {
+        const docs = matchDocs(s.read), done = !!currDone[s.id];
+        return `<div class="ob-step${done ? ' done' : ''}">
+          <label class="ob-head"><input type="checkbox" class="ob-chk" data-id="${s.id}"${done ? ' checked' : ''}><span>${escapeHtml(s.t)}</span></label>
+          <div class="ob-line">📖 <span class="ob-lbl">읽기</span> ${docs.length
+            ? docs.map(d => `<button class="chip read-chip" data-doc="${d.id}">${escapeHtml(d.title)}</button>`).join('')
+            : '<span class="muted">관련 자료는 아래 질문으로 AI에게 물어보세요</span>'}</div>
+          <div class="ob-line">💬 <span class="ob-lbl">물어보기</span> ${s.q.map(q => `<button class="chip ask-chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`).join('')}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+  root.innerHTML = `<div class="ob-hero"><h1>🎓 신입 온보딩 가이드</h1>
+    <p>매일 시간 날 때 여기 와서 <b>오늘 할 일</b>을 읽고 질문해 보세요. 3주면 혼자 일할 수 있어요.</p>${bar}</div>${today}${weeks}`;
+  $$('#onboardRoot .ob-chk').forEach(c => c.onchange = () => toggleStep(c.dataset.id));
+  $$('#onboardRoot .read-chip').forEach(b => b.onclick = () => openDoc(b.dataset.doc));
+  $$('#onboardRoot .ask-chip').forEach(b => b.onclick = () => askFromCurr(b.dataset.q));
+}
+
 // ---------- 설정 ----------
 function openSettings() {
   $('#clinicInput').value = state.clinic;
@@ -419,6 +491,6 @@ async function init() {
     LS.set('edu', state.eduLog); $('#eduInput').value = ''; renderEdu(); toast('교육 기록 추가');
   };
 
-  renderWiki();
+  renderWiki(); renderOnboard();
 }
 init();

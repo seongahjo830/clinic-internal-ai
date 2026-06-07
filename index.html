@@ -24,8 +24,8 @@
     </div>
     <div class="spacer"></div>
     <div class="seg" id="modeSeg">
-      <button data-mode="staff" class="on">직원</button>
-      <button data-mode="dentist">치과의사·실장</button>
+      <button data-mode="assistant" class="on">알바·어시</button>
+      <button data-mode="all">원장·실장</button>
     </div>
     <button class="icon-btn" id="settingsBtn" title="설정">⚙️</button>
   </div>
@@ -41,15 +41,15 @@
   <!-- ===== CHAT ===== -->
   <section class="panel on" id="panel-chat">
     <div class="hero">
-      <h1>무엇이든 물어보세요</h1>
-      <p>우리치과 내규·운영 규정·임상 위키를 근거로 답해드려요.</p>
+      <h1>일하다 막히면 물어보세요</h1>
+      <p>어시스트 준비물·진료 순서·환자 응대 멘트·가격·우리치과 정보까지, 우리치과 기준으로 알려드려요.</p>
       <span class="pill" id="kbPill">📚 자료 — 개</span>
     </div>
     <div id="chatLog"></div>
     <div id="examplesWrap"></div>
     <div class="composer">
       <div class="composer-in">
-        <textarea id="qInput" rows="1" placeholder="예) 비급여 단독 진료 차팅 어떻게 해요?"></textarea>
+        <textarea id="qInput" rows="1" placeholder="예) 발치 어시스트 뭐 준비해요?"></textarea>
         <button class="send" id="sendBtn" disabled>↑</button>
       </div>
     </div>
@@ -109,13 +109,13 @@
     <div class="field">
       <label>Claude API 키 <span id="keyStatus"></span></label>
       <input id="apiKeyInput" type="password" placeholder="sk-ant-...">
-      <div class="hint">키 발급: console.anthropic.com → API Keys. 키가 없어도 위키 검색·관련 자료 찾기는 작동해요.</div>
+      <div class="hint">Claude Code에서 쓰는 <b>sk-ant-…</b> API 키를 그대로 붙여넣으면 돼요. (구독/로그인 방식이라 sk-ant 키가 없다면 console.anthropic.com → API Keys에서 새로 발급 — API 사용료는 구독과 별도 과금.) 키가 없어도 위키 검색은 작동해요.</div>
     </div>
     <div class="field">
       <label>AI 모델</label>
       <select id="modelSelect">
-        <option value="claude-haiku-4-5-20251001">Haiku 4.5 (빠르고 저렴)</option>
-        <option value="claude-sonnet-4-6" selected>Sonnet 4.6 (권장 · 균형)</option>
+        <option value="claude-haiku-4-5" selected>Haiku 4.5 (가장 저렴 · 권장)</option>
+        <option value="claude-sonnet-4-6">Sonnet 4.6 (균형)</option>
         <option value="claude-opus-4-8">Opus 4.8 (가장 똑똑)</option>
       </select>
     </div>

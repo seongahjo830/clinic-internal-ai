@@ -10,9 +10,9 @@ const state = {
   baseDocs: [],
   uploads: LS.get('uploads', []),
   eduLog: LS.get('edu', []),
-  mode: LS.get('mode', 'staff'),
+  mode: (m => (m === 'dentist' ? 'all' : m === 'staff' ? 'assistant' : m))(LS.get('mode', 'assistant')),
   apiKey: LS.get('apikey', ''),
-  model: LS.get('model', 'claude-sonnet-4-6'),
+  model: LS.get('model', 'claude-haiku-4-5'),
   clinic: LS.get('clinic', '서울사계절치과'),
 };
 
@@ -28,9 +28,11 @@ async function loadKB() {
   }
 }
 const allDocs = () => [...state.baseDocs, ...state.uploads];
-// 현재 모드에서 볼 수 있는 문서 (직원=both만, 치과의사=전부)
+// 현재 모드에서 볼 수 있는 문서
+//  - 알바·어시(assistant): role==='assistant' 문서만 (경영/HR/임상판단은 숨김)
+//  - 원장·실장(all): 전부
 const visibleDocs = () =>
-  allDocs().filter(d => state.mode === 'dentist' || d.audience !== 'dentist');
+  state.mode === 'all' ? allDocs() : allDocs().filter(d => (d.role || 'assistant') === 'assistant');
 
 // ---------- 검색/검색 점수 ----------
 function tokenize(q) {
@@ -111,27 +113,30 @@ function setTab(tab) {
 function setMode(mode) {
   state.mode = mode; LS.set('mode', mode);
   $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-  // 직원은 자료추가 탭 숨김
-  $('#tabUpload').style.display = mode === 'dentist' ? '' : 'none';
-  if (mode === 'staff' && $('#panel-upload').classList.contains('on')) setTab('chat');
+  // 자료추가는 원장·실장(all) 모드에서만
+  $('#tabUpload').style.display = mode === 'all' ? '' : 'none';
+  if (mode !== 'all' && $('#panel-upload').classList.contains('on')) setTab('chat');
   renderExamples(); renderWiki(); updateKbPill();
 }
 function updateKbPill() {
-  $('#kbPill').textContent = `📚 자료 ${visibleDocs().length}개` + (state.apiKey ? ' · AI ON' : ' · 검색 모드');
+  const pill = $('#kbPill');
+  pill.textContent = `📚 자료 ${visibleDocs().length}개` + (state.apiKey ? ' · 🤖 AI ON' : ' · 🔎 검색 모드 (눌러서 AI 켜기)');
+  pill.style.cursor = state.apiKey ? 'default' : 'pointer';
 }
 
 // ---------- 예시 질문 ----------
-const EX_STAFF = [
-  '비급여 단독 진료 차팅 어떻게 해요?',
-  '휴가 신청은 어떻게 하나요?',
-  '대기시간 30분 넘으면 어떻게 응대해요?',
-  '환자가 "왜 이렇게 비싸"라고 하면?',
-  '신규 입사자 온보딩 순서는?',
+const EX_ASSIST = [
+  '신환 오면 뭐부터 준비해요?',
+  '레진 할 때 체어 뭐 세팅해요?',
+  '대기 30분 넘으면 어떻게 해요?',
+  '"왜 이렇게 비싸요" 하면 뭐라고 답해요?',
+  '임플란트 가격 얼마예요?',
+  '진료 끝나고 다음 예약 며칠 뒤로 잡아요?',
 ];
-const EX_DENT = ['임플란트 2차 수술 루틴은?', '레진 수복 우리치과 SOP는?', '원장 지정 진료 응대 표준은?'];
+const EX_MGR = ['신규 입사자 온보딩 순서는?', '차팅 누락 방지 어떻게 해요?', '원장 지정 진료 응대 표준은?'];
 function renderExamples() {
   if ($('#chatLog').children.length) { $('#examplesWrap').innerHTML = ''; return; }
-  const list = state.mode === 'dentist' ? [...EX_STAFF.slice(0, 3), ...EX_DENT] : EX_STAFF;
+  const list = state.mode === 'all' ? [...EX_ASSIST.slice(0, 3), ...EX_MGR] : EX_ASSIST;
   $('#examplesWrap').innerHTML =
     `<div class="examples">${list.map(q => `<button class="ex-chip">${escapeHtml(q)}</button>`).join('')}</div>`;
   $$('#examplesWrap .ex-chip').forEach(c => c.onclick = () => { $('#qInput').value = c.textContent; ask(); });
@@ -155,13 +160,14 @@ function bindSourceChips(el) {
   $$('.src-chip', el).forEach(c => c.onclick = () => openDoc(c.dataset.doc));
 }
 
-const SYSTEM = clinic => `너는 "${clinic}"의 내부 규정·운영·임상 안내를 돕는 AI 비서다.
+const SYSTEM = clinic => `너는 "${clinic}"에서 일하는 치과 알바·어시스트·데스크 직원을 돕는 내부 AI 선배다.
+질문자는 보통 경력이 짧은 직원이다. "어시스트 어떻게 해요 / 이거 할 때 뭐 준비해요 / 환자한테 뭐라고 말해요 / 가격 얼마예요 / 우리치과는 어떻게 돼 있어요" 같은 실무 질문에 답한다.
 규칙:
-1. 아래에 제공된 "우리치과 자료 발췌"에 있는 내용만 근거로 답한다. 발췌에 없는 사실은 지어내지 말 것.
-2. 답을 모르면 "이 내용은 등록된 자료에 없어요. 실장님/원장님께 확인하거나 자료를 추가해 주세요."라고 말한다.
-3. 후배에게 알려주듯 친절하고 구체적으로, 단계가 있으면 번호로. 한국어로.
-4. 답변 끝에 어떤 자료를 참고했는지 자료 제목을 언급한다.
-5. 의료법·환자안전 관련은 자료에 적힌 기준을 정확히 전달한다.`;
+1. 아래 "우리치과 자료 발췌"에 있는 내용만 근거로 답한다. 발췌에 없는 사실(특히 가격·수치)은 지어내지 말 것.
+2. 모르면 "이건 등록된 자료에 없어요. 실장님께 확인하거나, 실장님이 자료를 추가하면 답해드릴 수 있어요."라고 말한다.
+3. 후배에게 알려주듯 친절하고 아주 구체적으로. 준비물·순서는 번호나 체크리스트로. 환자에게 할 말이 있으면 따옴표로 멘트를 그대로 제시. 한국어.
+4. 환자 응대 멘트는 절대 원장·치과의사의 실력을 의심하게 만들지 말 것. 표준화·전문성·근거 프레임으로 안내한다.
+5. 답변 끝에 참고한 자료 제목을 언급한다. 의료법·환자안전 관련은 자료 기준을 정확히 전달한다.`;
 
 function contextText(docs) {
   return '\n\n# 우리치과 자료 발췌\n' + docs.map((d, i) =>
@@ -250,7 +256,7 @@ function renderWiki(filter = '') {
             <div class="ti">${escapeHtml(d.title)}</div>
             <div class="sm">${escapeHtml(d.summary || '')}</div>
           </div>
-          ${d.audience === 'dentist' ? '<span class="badge dent">치과의사</span>' : ''}
+          ${d.role === 'dentist' ? '<span class="badge dent">치과의사</span>' : d.role === 'manager' ? '<span class="badge mgr">실장·경영</span>' : ''}
           ${d.uploaded ? '<span class="badge up">추가</span>' : ''}
         </div>`).join('')}</div>
     </div>`).join('');
@@ -266,7 +272,7 @@ function openDoc(id) {
   $('#readerTitle').textContent = d.title;
   $('#readerMeta').innerHTML =
     `<span>📂 ${escapeHtml(d.category)}</span>` +
-    (d.audience === 'dentist' ? '<span>🦷 치과의사용</span>' : '<span>👥 전직원</span>') +
+    (d.role === 'dentist' ? '<span>🦷 치과의사용</span>' : d.role === 'manager' ? '<span>👔 원장·실장용</span>' : '<span>🧑‍🔧 알바·어시</span>') +
     (d.source ? `<span>📄 ${escapeHtml(d.source)}</span>` : '');
   $('#readerBody').innerHTML = renderMarkdown(d.markdown);
   bindWikilinks($('#readerBody'));
@@ -289,7 +295,7 @@ function addUpload(title, text) {
     id: 'up-' + Date.now() + '-' + Math.floor(performance.now()),
     title: title.replace(/\.(md|txt|json|csv|markdown)$/i, ''),
     category: '➕ 추가 자료',
-    audience: 'both',
+    role: 'assistant',
     summary: text.replace(/[#>*`|\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160),
     source: '업로드: ' + title,
     markdown: text,
@@ -382,6 +388,7 @@ async function init() {
   $$('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
   $$('#modeSeg button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
   $('#settingsBtn').onclick = openSettings;
+  $('#kbPill').onclick = () => { if (!state.apiKey) openSettings(); };
   $('#closeSettings').onclick = () => $('#overlay').classList.remove('on');
   $('#saveSettings').onclick = saveSettings;
   $('#overlay').onclick = e => { if (e.target.id === 'overlay') $('#overlay').classList.remove('on'); };

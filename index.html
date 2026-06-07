@@ -116,7 +116,12 @@
     <div class="field">
       <label>Claude API 키 <span id="keyStatus"></span></label>
       <input id="apiKeyInput" type="password" placeholder="sk-ant-...">
-      <div class="hint">Claude Code에서 쓰는 <b>sk-ant-…</b> API 키를 그대로 붙여넣으면 돼요. (구독/로그인 방식이라 sk-ant 키가 없다면 console.anthropic.com → API Keys에서 새로 발급 — API 사용료는 구독과 별도 과금.) 키가 없어도 위키 검색은 작동해요.</div>
+      <div class="hint">Claude Code에서 쓰는 <b>sk-ant-…</b> API 키를 그대로 붙여넣으면 돼요. (구독/로그인 방식이라 sk-ant 키가 없다면 console.anthropic.com → API Keys에서 새로 발급 — API 사용료는 구독과 별도 과금.) 키가 없어도 위키 검색은 작동해요. <b>이 키는 이 브라우저에만</b> 저장돼요.</div>
+    </div>
+    <div class="field">
+      <label>🤝 공유 AI (선택) — 직원 모두 키 없이 사용</label>
+      <input id="proxyUrl" placeholder="https://<프로젝트>.supabase.co/functions/v1/ask">
+      <div class="hint">키를 공개 사이트에 박으면 도용 위험이라, <b>키를 서버에 숨기는 프록시</b>를 쓰면 직원 누구나 자기 키 없이 AI를 써요. 설정 시 이 주소로 호출(개인 키보다 우선). 만드는 법: 프로젝트 <code>supabase/functions/ask</code> → <code>supabase functions deploy ask --no-verify-jwt</code> + <code>supabase secrets set ANTHROPIC_API_KEY=sk-ant-…</code></div>
     </div>
     <div class="field">
       <label>AI 모델</label>

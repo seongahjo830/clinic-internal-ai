@@ -151,8 +151,8 @@ function setMode(mode) {
 }
 function updateKbPill() {
   const pill = $('#kbPill');
-  pill.textContent = `📚 자료 ${visibleDocs().length}개` + (state.apiKey ? ' · 🤖 AI ON' : ' · 🔎 검색 모드 (눌러서 AI 켜기)');
-  pill.style.cursor = state.apiKey ? 'default' : 'pointer';
+  pill.textContent = `📚 자료 ${visibleDocs().length}개` + (aiReady() ? ' · 🤖 AI ON' : ' · 🔎 검색 모드 (눌러서 AI 켜기)');
+  pill.style.cursor = aiReady() ? 'default' : 'pointer';
 }
 
 // ---------- 예시 질문 ----------
@@ -217,27 +217,35 @@ function contextText(docs) {
   }).join('\n');
 }
 
+const aiProxy = () => (LS.get('proxy', '') || '').trim();
+const aiReady = () => !!(aiProxy() || state.apiKey);
 async function callClaude(question, docs) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': state.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: state.model,
-      max_tokens: 1500,
-      system: SYSTEM(state.clinic) + contextText(docs),
-      messages: [{ role: 'user', content: question }],
-    }),
-  });
+  const payload = {
+    model: state.model,
+    max_tokens: 1500,
+    system: SYSTEM(state.clinic) + contextText(docs),
+    messages: [{ role: 'user', content: question }],
+  };
+  const proxy = aiProxy();
+  // 공유 AI 프록시가 있으면 그쪽으로(키 노출 X). 없으면 각자 키로 직접 호출.
+  const res = proxy
+    ? await fetch(proxy, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+    : await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(payload),
+    });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`API ${res.status}: ${t.slice(0, 200)}`);
+    throw new Error(`AI ${res.status}: ${t.slice(0, 200)}`);
   }
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
   return (data.content || []).map(c => c.text || '').join('');
 }
 
@@ -253,7 +261,7 @@ async function ask() {
   const thinking = addMsg('ai', `<span class="thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span> 자료를 찾는 중…</span>`);
 
   try {
-    if (state.apiKey) {
+    if (aiReady()) {
       const answer = await callClaude(q, docs);
       thinking.innerHTML = `<div class="md">${renderMarkdown(answer)}</div>${sourcesHtml(docs)}`;
     } else {
@@ -512,6 +520,7 @@ function openSettings() {
   $('#clinicInput').value = state.clinic;
   $('#apiKeyInput').value = state.apiKey;
   $('#modelSelect').value = state.model;
+  $('#proxyUrl').value = LS.get('proxy', '') || '';
   const c = Sync.cfg() || {};
   $('#syncUrl').value = c.url || '';
   $('#syncKey').value = c.key || '';
@@ -567,6 +576,7 @@ function saveSettings() {
   state.apiKey = $('#apiKeyInput').value.trim();
   state.model = $('#modelSelect').value;
   LS.set('clinic', state.clinic); LS.set('apikey', state.apiKey); LS.set('model', state.model);
+  LS.set('proxy', $('#proxyUrl').value.trim());
   $('#clinicName').textContent = state.clinic;
   updateKeyStatus(); updateKbPill();
   $('#overlay').classList.remove('on');
@@ -593,7 +603,7 @@ async function init() {
   $$('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
   $$('#modeSeg button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
   $('#settingsBtn').onclick = openSettings;
-  $('#kbPill').onclick = () => { if (!state.apiKey) openSettings(); };
+  $('#kbPill').onclick = () => { if (!aiReady()) openSettings(); };
   $('#closeSettings').onclick = () => $('#overlay').classList.remove('on');
   $('#saveSettings').onclick = saveSettings;
   $('#overlay').onclick = e => { if (e.target.id === 'overlay') $('#overlay').classList.remove('on'); };

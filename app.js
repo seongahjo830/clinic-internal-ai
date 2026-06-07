@@ -275,6 +275,7 @@ function renderWiki(filter = '') {
             <div class="ti">${escapeHtml(d.title)}</div>
             <div class="sm">${escapeHtml(d.summary || '')}</div>
           </div>
+          ${d.refined ? '<span class="badge refined">📘 정리됨</span>' : ''}
           ${d.role === 'dentist' ? '<span class="badge dent">치과의사</span>' : d.role === 'manager' ? '<span class="badge mgr">실장·경영</span>' : ''}
           ${d.uploaded ? '<span class="badge up">추가</span>' : ''}
         </div>`).join('')}</div>

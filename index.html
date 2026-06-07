@@ -10,7 +10,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦷</text></svg>">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
@@ -42,8 +42,7 @@
   <!-- ===== CHAT ===== -->
   <section class="panel on" id="panel-chat">
     <div class="hero">
-      <h1>일하다 막히면 물어보세요</h1>
-      <p>어시스트 준비물·진료 순서·환자 응대 멘트·가격·우리치과 정보까지, 우리치과 기준으로 알려드려요.</p>
+      <h1>무엇이든 물어보세요</h1>
       <span class="pill" id="kbPill">📚 자료 — 개</span>
     </div>
     <div id="chatCtrl" style="display:none"><button class="btn ghost sm" id="resetChat">↺ 새 질문 (처음으로)</button></div>
@@ -108,7 +107,6 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <h2>⚙️ 설정</h2>
-    <p class="desc">AI 답변을 켜려면 Claude API 키가 필요해요. 키는 <b>이 브라우저에만</b> 저장되고 서버로 전송되지 않아요(앱이 Anthropic API를 직접 호출).</p>
     <div class="field">
       <label>치과 이름</label>
       <input id="clinicInput" placeholder="서울사계절치과">
@@ -116,12 +114,11 @@
     <div class="field">
       <label>Claude API 키 <span id="keyStatus"></span></label>
       <input id="apiKeyInput" type="password" placeholder="sk-ant-...">
-      <div class="hint">Claude Code에서 쓰는 <b>sk-ant-…</b> API 키를 그대로 붙여넣으면 돼요. (구독/로그인 방식이라 sk-ant 키가 없다면 console.anthropic.com → API Keys에서 새로 발급 — API 사용료는 구독과 별도 과금.) 키가 없어도 위키 검색은 작동해요. <b>이 키는 이 브라우저에만</b> 저장돼요.</div>
+      <div class="hint">이 브라우저에만 저장. 없으면 위키 검색만 작동.</div>
     </div>
     <div class="field">
-      <label>🤝 공유 AI (선택) — 직원 모두 키 없이 사용</label>
+      <label>공유 AI 프록시 (선택)</label>
       <input id="proxyUrl" placeholder="https://<프로젝트>.supabase.co/functions/v1/ask">
-      <div class="hint">키를 공개 사이트에 박으면 도용 위험이라, <b>키를 서버에 숨기는 프록시</b>를 쓰면 직원 누구나 자기 키 없이 AI를 써요. 설정 시 이 주소로 호출(개인 키보다 우선). 만드는 법: 프로젝트 <code>supabase/functions/ask</code> → <code>supabase functions deploy ask --no-verify-jwt</code> + <code>supabase secrets set ANTHROPIC_API_KEY=sk-ant-…</code></div>
     </div>
     <div class="field">
       <label>AI 모델</label>
@@ -134,9 +131,8 @@
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <div class="field">
       <label>🔗 실시간 공유 <span id="syncStatus" class="sync-st"></span></label>
-      <div class="hint" style="margin-bottom:9px">켜면 <b>어느 기기·브라우저에서 추가해도 전 직원에게 실시간 반영</b>돼요. 무료 Supabase 한 번만 연결하면 됩니다.</div>
       <details class="setup-guide">
-        <summary>📋 처음 한 번 — 2분 연결 방법 (눌러서 펼치기)</summary>
+        <summary>📋 연결 방법 (눌러서 펼치기)</summary>
         <ol>
           <li><a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> 가입 → <b>New project</b> (무료, 비번 아무거나)</li>
           <li>좌측 <b>SQL Editor</b> → 아래 SQL 붙여넣고 <b>Run</b> <button class="btn sm ghost" id="copySql" type="button">SQL 복사</button>
@@ -160,6 +156,6 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=5"></script>
+<script type="module" src="app.js?v=6"></script>
 </body>
 </html>

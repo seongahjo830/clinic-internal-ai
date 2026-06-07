@@ -307,8 +307,7 @@ async function ask() {
       } else {
         const top = docs[0];
         thinking.innerHTML =
-          `<div class="md"><b>🔎 검색 모드</b> — AI 답변을 켜려면 위 <b>📚 자료…</b> 줄(또는 ⚙️)에서 Claude API 키를 넣어주세요. 지금은 가장 관련 있는 자료를 그대로 보여드려요:</div>` +
-          `<div class="md card" style="margin-top:10px;padding:16px">${renderMarkdown(excerpt(top, q))}</div>` +
+          `<div class="md card" style="padding:16px">${renderMarkdown(excerpt(top, q))}</div>` +
           sourcesHtml(docs);
         bindWikilinks(thinking);
       }
@@ -352,8 +351,7 @@ function renderWiki(filter = '') {
       const g = {};
       for (const d of cards) (g[d.category] ||= []).push(d);
       const cats = Object.keys(g).sort((a, b) => a.localeCompare(b, 'ko'));
-      body = `<div class="core-intro">못 읽을 시간 없을 땐 이 카드만. 실전에 바로 쓰는 핵심·실수주의·환자멘트예요. (자세한 건 카드 클릭)</div>`
-        + cats.map(cat => `<div class="core-cat">${escapeHtml(cat)} <span>${g[cat].length}</span></div>` + g[cat].map(coreCard).join('')).join('');
+      body = cats.map(cat => `<div class="core-cat">${escapeHtml(cat)} <span>${g[cat].length}</span></div>` + g[cat].map(coreCard).join('')).join('');
     }
   } else {
     const groups = {};
@@ -533,8 +531,7 @@ function renderOnboard() {
   const root = $('#onboardRoot'); if (!root) return;
   const p = currProgress(), next = nextStep();
   const today = next
-    ? `<div class="today"><div class="lbl">🎓 오늘 할 일</div><div class="step-t">${escapeHtml(next.t)}</div>
-        <div class="hint">읽을 자료를 보고 → 아래 질문을 눌러 물어보고 → 다 됐으면 체크하세요.</div></div>`
+    ? `<div class="today"><div class="lbl">🎓 오늘 할 일</div><div class="step-t">${escapeHtml(next.t)}</div></div>`
     : `<div class="today doneall"><div class="lbl">🎉 온보딩을 모두 끝냈어요!</div><div class="hint">이제 궁금한 건 언제든 💬 질문하기에서 물어보세요.</div></div>`;
   const bar = `<div class="prog"><div class="prog-bar"><span style="width:${p.pct}%"></span></div><div class="prog-n">${p.done}/${p.total} · ${p.pct}%</div></div>`;
   const weeks = CURRICULUM.map(w => `
@@ -550,8 +547,7 @@ function renderOnboard() {
         </div>`;
       }).join('')}
     </div>`).join('');
-  root.innerHTML = `<div class="ob-hero"><h1>🎓 신입 온보딩 가이드</h1>
-    <p>매일 시간 날 때 여기 와서 <b>오늘 할 일</b>을 읽고 질문해 보세요. 3주면 혼자 일할 수 있어요.</p>${bar}</div>${today}${weeks}`;
+  root.innerHTML = `<div class="ob-hero"><h1>🎓 신입 온보딩</h1>${bar}</div>${today}${weeks}`;
   $$('#onboardRoot .ob-chk').forEach(c => c.onchange = () => toggleStep(c.dataset.id));
   $$('#onboardRoot .read-chip').forEach(b => b.onclick = () => openDoc(b.dataset.doc));
   $$('#onboardRoot .ask-chip').forEach(b => b.onclick = () => askFromCurr(b.dataset.q));

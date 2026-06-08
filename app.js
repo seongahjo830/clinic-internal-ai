@@ -72,14 +72,20 @@ function scoreDoc(doc, base, extra) {
   const sum = (doc.summary || '').toLowerCase();
   const cat = (doc.category || '').toLowerCase();
   const body = (doc.markdown || '').toLowerCase();
+  const kw = (doc.kw || []).map(k => k.toLowerCase());
+  const kwHit = t => kw.some(k => k.includes(t) || t.includes(k));
   let s = 0;
   for (const t of base) {
-    if (title.includes(t)) s += 8;
+    const t2 = t.length >= 3 ? t.slice(0, -1) : t; // 조사 1자 제거 변형(이갈이로→이갈이)
+    if (kwHit(t) || (t2 !== t && kwHit(t2))) s += 11;
+    if (title.includes(t) || (t2 !== t && title.includes(t2))) s += 8;
     if (cat.includes(t)) s += 5;
     if (sum.includes(t)) s += 4;
     s += Math.min(body.split(t).length - 1, 6);
+    if (t2 !== t) s += Math.min(body.split(t2).length - 1, 3);
   }
   for (const t of extra) { // 동의어는 약간 낮게
+    if (kwHit(t)) s += 8;
     if (title.includes(t)) s += 6;
     if (cat.includes(t)) s += 4;
     if (sum.includes(t)) s += 3;
